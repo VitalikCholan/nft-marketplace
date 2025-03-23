@@ -4,7 +4,6 @@ pragma solidity ^0.8.29;
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Counters} from "@openzeppelin/contracts/utils/Counters.sol";
 import {ERC2981} from "@openzeppelin/contracts/token/common/ERC2981.sol";
 
 /**
@@ -12,8 +11,6 @@ import {ERC2981} from "@openzeppelin/contracts/token/common/ERC2981.sol";
  * @dev Implementation of the NFT contract with royalty support
  */
 contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
-    using Counters for Counters.Counter;
-
     // Struct to define a trait
     struct Trait {
         string traitType;  // e.g., "Background", "Eyes", "Mouth"
@@ -24,7 +21,7 @@ contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
     uint256 public constant MAX_TRAITS = 8;
     
     // Token ID counter
-    Counters.Counter private _tokenIds;
+    uint256 private _tokenIdCounter;
     
     // Base URI for token metadata
     string private _baseTokenURI;
@@ -63,8 +60,8 @@ contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
         string memory tokenURI,
         Trait[] memory traits
     ) public returns (uint256) {
-        _tokenIds.increment();
-        uint256 newTokenId = _tokenIds.current();
+        _tokenIdCounter++;
+        uint256 newTokenId = _tokenIdCounter;
         
         _safeMint(to, newTokenId);
         _setTokenURI(newTokenId, tokenURI);
@@ -141,7 +138,10 @@ contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
      * @return Array of traits
      */
     function getTraits(uint256 tokenId) public view returns (Trait[] memory) {
-        require(ownerOf(tokenId) != address(0), "Token does not exist");
+        // Check if token exists in traits mapping 
+        if (_tokenTraits[tokenId].length == 0 && _creators[tokenId] == address(0)) {
+            return new Trait[](0);
+        }
         return _tokenTraits[tokenId];
     }
     
@@ -172,6 +172,7 @@ contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
         require((ownerOf(tokenId) == _msgSender()) || (isApprovedForAll(ownerOf(tokenId), _msgSender())), "Caller is not owner nor approved");
         _burn(tokenId);
         delete _creators[tokenId];
+        delete _tokenTraits[tokenId]; // Clean up traits data
     }
 
     /**
