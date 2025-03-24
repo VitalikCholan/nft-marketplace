@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.29;
+pragma solidity ^0.8.29; 
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
@@ -8,7 +8,7 @@ import {ERC2981} from "@openzeppelin/contracts/token/common/ERC2981.sol";
 
 /**
  * @title NFTContract
- * @dev Implementation of the NFT contract with royalty support
+ * @dev Implementation of the NFT contract with royalty support and traits
  */
 contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
     // Struct to define a trait
@@ -120,7 +120,6 @@ contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
         require(_msgSender() == ownerOf(tokenId), "Caller is not the token owner");
         require(traits.length <= MAX_TRAITS, "Too many traits"); // Add trait limit
 
-        
         delete _tokenTraits[tokenId]; // Clear existing traits
         
         for (uint i = 0; i < traits.length; i++) {

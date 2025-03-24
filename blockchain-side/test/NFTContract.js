@@ -104,6 +104,28 @@ describe("NFTContract", function () {
         "Invalid trait type"
       );
     });
+
+    it("Should set traits for multiple tokens in batch", async function () {
+      const { nftContract, owner } = await loadFixture(deployNFTContract);
+
+      // First mint two tokens
+      await nftContract.mintWithTraits(owner.address, "ipfs://test1", []);
+      await nftContract.mintWithTraits(owner.address, "ipfs://test2", []);
+
+      const tokenIds = [1, 2];
+      const traitsArray = [
+        [{ traitType: "Background", value: "Blue" }],
+        [{ traitType: "Background", value: "Red" }],
+      ];
+
+      await nftContract.setTraitsBatch(tokenIds, traitsArray);
+
+      const traits1 = await nftContract.getTraits(1);
+      const traits2 = await nftContract.getTraits(2);
+
+      expect(traits1[0].value).to.equal("Blue");
+      expect(traits2[0].value).to.equal("Red");
+    });
   });
 
   describe("Royalties", function () {
@@ -205,6 +227,54 @@ describe("NFTContract", function () {
       await expect(nftContract.connect(user1).burn(1)).to.be.revertedWith(
         "Caller is not owner nor approved"
       );
+    });
+  });
+
+  describe("Base URI", function () {
+    it("Should set and use base URI correctly", async function () {
+      const { nftContract, owner } = await loadFixture(deployNFTContract);
+      const newBaseURI = "https://api.example.com/";
+
+      await nftContract.setBaseURI(newBaseURI);
+
+      // Mint a token and check if baseURI is used
+      await nftContract.mintWithTraits(owner.address, "token1", []);
+      expect(await nftContract.tokenURI(1)).to.equal(newBaseURI + "token1");
+    });
+
+    it("Should only allow owner to set base URI", async function () {
+      const { nftContract, user1 } = await loadFixture(deployNFTContract);
+      await expect(nftContract.connect(user1).setBaseURI("https://test.com/"))
+        .to.be.reverted;
+    });
+  });
+
+  describe("Creator", function () {
+    it("Should get creator correctly", async function () {
+      const { nftContract, owner } = await loadFixture(deployNFTContract);
+      await nftContract.mintWithTraits(owner.address, "ipfs://test", []);
+      expect(await nftContract.getCreator(1)).to.equal(owner.address);
+    });
+
+    it("Should revert when getting creator of non-existent token", async function () {
+      const { nftContract } = await loadFixture(deployNFTContract);
+      await expect(nftContract.getCreator(1)).to.be.reverted;
+    });
+  });
+
+  describe("Interface Support", function () {
+    it("Should support ERC721 interface", async function () {
+      const { nftContract } = await loadFixture(deployNFTContract);
+      const ERC721_INTERFACE_ID = "0x80ac58cd";
+      expect(await nftContract.supportsInterface(ERC721_INTERFACE_ID)).to.be
+        .true;
+    });
+
+    it("Should support ERC2981 interface", async function () {
+      const { nftContract } = await loadFixture(deployNFTContract);
+      const ERC2981_INTERFACE_ID = "0x2a55205a";
+      expect(await nftContract.supportsInterface(ERC2981_INTERFACE_ID)).to.be
+        .true;
     });
   });
 });
