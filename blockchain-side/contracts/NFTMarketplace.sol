@@ -380,4 +380,148 @@ contract NFTMarketplace is ERC721URIStorage, ERC2981, Ownable, ReentrancyGuard {
     function emergencyWithdraw() external onlyOwner {
         payable(owner()).transfer(address(this).balance);
     }
+
+    /**
+     * @dev Creates an auction for a token
+     * @param tokenId The ID of the token to auction
+     * @param startingPrice Starting price in wei
+     * @param duration Duration of the auction in seconds
+     */
+    function createAuction(
+        uint256 tokenId,
+        uint256 startingPrice,
+        uint256 duration
+    ) public nonReentrant {
+        require(ownerOf(tokenId) == msg.sender, "Not token owner");
+        require(duration >= 1 hours && duration <= 7 days, "Invalid duration");
+        require(startingPrice > 0, "Invalid starting price");
+        
+        _transfer(msg.sender, address(this), tokenId);
+        
+        tokenIdToAuction[tokenId] = Auction({
+            tokenId: tokenId,
+            seller: payable(msg.sender),
+            startingPrice: startingPrice,
+            endingPrice: startingPrice,
+            duration: duration,
+            startedAt: block.timestamp,
+            isActive: true,
+            highestBidder: address(0),
+            highestBid: 0
+        });
+        
+        emit AuctionCreated(tokenId, startingPrice, duration);
+    }
+
+    /**
+     * @dev Places a bid on an active auction
+     * @param tokenId The ID of the token being auctioned
+     */
+    function placeBid(uint256 tokenId) public payable nonReentrant {
+        Auction storage auction = tokenIdToAuction[tokenId];
+        require(auction.isActive, "Auction not active");
+        require(block.timestamp < auction.startedAt + auction.duration, "Auction ended");
+        require(msg.value > auction.highestBid, "Bid too low");
+        
+        address payable previousBidder = payable(auction.highestBidder);
+        uint256 previousBid = auction.highestBid;
+        
+        // Update auction state
+        auction.highestBidder = msg.sender;
+        auction.highestBid = msg.value;
+        
+        // Refund previous bidder
+        if (previousBidder != address(0)) {
+            previousBidder.transfer(previousBid);
+        }
+        
+        emit BidPlaced(tokenId, msg.sender, msg.value);
+    }
+
+    /**
+     * @dev Finalizes an auction after its duration has passed
+     * @param tokenId The ID of the token being auctioned
+     */
+    function finalizeAuction(uint256 tokenId) public nonReentrant {
+        Auction storage auction = tokenIdToAuction[tokenId];
+        require(auction.isActive, "Auction not active");
+        require(block.timestamp >= auction.startedAt + auction.duration, "Auction still active");
+        
+        auction.isActive = false;
+        
+        if (auction.highestBidder != address(0)) {
+            // Transfer token to winner
+            _transfer(address(this), auction.highestBidder, tokenId);
+            
+            // Calculate and transfer royalties
+            (address royaltyReceiver, uint256 royaltyAmount) = royaltyInfo(tokenId, auction.highestBid);
+            if (royaltyAmount > 0 && royaltyReceiver != address(0)) {
+                payable(royaltyReceiver).transfer(royaltyAmount);
+                auction.seller.transfer(auction.highestBid - royaltyAmount);
+            } else {
+                auction.seller.transfer(auction.highestBid);
+            }
+            
+            emit AuctionFinalized(tokenId, auction.highestBidder, auction.highestBid);
+        } else {
+            // No bids, return token to seller
+            _transfer(address(this), auction.seller, tokenId);
+        }
+    }
+
+    /**
+     * @dev Creates an offer for a token
+     * @param tokenId The ID of the token
+     * @param duration Duration the offer is valid for, in seconds
+     */
+    function makeOffer(uint256 tokenId, uint256 duration) public payable {
+        require(msg.value > 0, "Invalid offer amount");
+        require(duration >= 1 hours && duration <= 7 days, "Invalid duration");
+        
+        Offer memory offer = Offer({
+            buyer: payable(msg.sender),
+            price: msg.value,
+            expiresAt: block.timestamp + duration
+        });
+        
+        tokenIdToOffers[tokenId].push(offer);
+        emit OfferCreated(tokenId, msg.sender, msg.value);
+    }
+
+    /**
+     * @dev Accepts an offer for a token
+     * @param tokenId The ID of the token
+     * @param offerIndex The index of the offer to accept
+     */
+    function acceptOffer(uint256 tokenId, uint256 offerIndex) public nonReentrant {
+        require(ownerOf(tokenId) == msg.sender, "Not token owner");
+        
+        Offer[] storage offers = tokenIdToOffers[tokenId];
+        require(offerIndex < offers.length, "Invalid offer index");
+        
+        Offer memory offer = offers[offerIndex];
+        require(block.timestamp <= offer.expiresAt, "Offer expired");
+        
+        // Transfer token to buyer
+        _transfer(msg.sender, offer.buyer, tokenId);
+        
+        // Calculate and transfer royalties
+        (address royaltyReceiver, uint256 royaltyAmount) = royaltyInfo(tokenId, offer.price);
+        if (royaltyAmount > 0 && royaltyReceiver != address(0)) {
+            payable(royaltyReceiver).transfer(royaltyAmount);
+            payable(msg.sender).transfer(offer.price - royaltyAmount);
+        } else {
+            payable(msg.sender).transfer(offer.price);
+        }
+        
+        // Remove accepted offer and refund others
+        for (uint i = 0; i < offers.length; i++) {
+            if (i != offerIndex && block.timestamp <= offers[i].expiresAt) {
+                offers[i].buyer.transfer(offers[i].price);
+            }
+        }
+        
+        delete tokenIdToOffers[tokenId];
+        emit OfferAccepted(tokenId, offer.buyer, offer.price);
+    }
 }
