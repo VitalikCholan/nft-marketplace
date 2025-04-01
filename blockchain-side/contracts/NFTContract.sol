@@ -8,6 +8,8 @@ import {ERC2981} from "@openzeppelin/contracts/token/common/ERC2981.sol";
 
 /**
  * @title NFTContract
+ * @notice This contract is a simple NFT contract that allows users to mint NFTs with traits
+ * @author Vitalik Cholan 
  * @dev Implementation of the NFT contract with royalty support and traits
  */
 contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
@@ -60,6 +62,8 @@ contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
         string memory tokenURI,
         Trait[] memory traits
     ) public returns (uint256) {
+        require(bytes(tokenURI).length > 0, "Empty URI");
+
         _tokenIdCounter++;
         uint256 newTokenId = _tokenIdCounter;
         
