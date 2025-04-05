@@ -2,6 +2,7 @@ const {
   loadFixture,
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 const { expect } = require("chai");
+import { ethers } from "hardhat";
 
 describe("NFTContract", function () {
   // Fixture to deploy contract
@@ -11,6 +12,7 @@ describe("NFTContract", function () {
       "CoreNFT",
       "CNFT",
     ]);
+    await NFTContract.waitForDeployment();
     return { nftContract: NFTContract, owner, user1, user2 };
   }
 

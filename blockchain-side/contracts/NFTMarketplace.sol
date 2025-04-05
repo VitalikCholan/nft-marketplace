@@ -3,7 +3,7 @@ pragma solidity ^0.8.29;
 
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import {ERC721Royalty} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
 
@@ -39,6 +39,19 @@ contract NFTMarketplace is Ownable, ReentrancyGuard {
     mapping(address => uint256) private _tokenIds;
 
     constructor() Ownable(msg.sender) {}
+
+    /**
+     * @dev Gets a market item
+     * @param nftContract Address of the NFT contract
+     * @param tokenId Token ID to get
+     */
+    function getMarketItem(address nftContract, uint256 tokenId) 
+        public 
+        view 
+        returns (MarketItem memory) 
+    {
+        return idToMarketItem[nftContract][tokenId];
+    }
 
     // Add this function to track new NFT contracts
     function _addNFTContract(address nftContract) private {
