@@ -2,18 +2,18 @@ const {
   loadFixture,
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 const { expect } = require("chai");
-import { ethers } from "hardhat";
+const { ethers } = require("hardhat");
 
 describe("NFTContract", function () {
   // Fixture to deploy contract
   async function deployNFTContract() {
     const [owner, user1, user2] = await ethers.getSigners();
-    const NFTContract = await ethers.deployContract("NFTContract", [
-      "CoreNFT",
-      "CNFT",
-    ]);
-    await NFTContract.waitForDeployment();
-    return { nftContract: NFTContract, owner, user1, user2 };
+    const NFTContract = await ethers.getContractFactory(
+      "contracts/NFTContract.sol:NFTContract"
+    );
+    const nftContract = await NFTContract.deploy("CoreNFT", "CNFT");
+    await nftContract.waitForDeployment();
+    return { nftContract, owner, user1, user2 };
   }
 
   describe("Deployment", function () {

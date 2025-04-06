@@ -9,19 +9,22 @@ describe("NFTMarketplace", function () {
     const [owner, user1, user2, user3] = await ethers.getSigners();
 
     // Deploy NFTContract first
-    const NFTContract = await ethers.deployContract("NFTContract", [
-      "MyNFT",
-      "MNFT",
-    ]);
-    await NFTContract.waitForDeployment();
+    const NFTContract = await ethers.getContractFactory(
+      "contracts/NFTContract.sol:NFTContract"
+    );
+    const nftContract = await NFTContract.deploy("MyNFT", "MNFT");
+    await nftContract.waitForDeployment();
 
     // Deploy marketplace
-    const NFTMarketplace = await ethers.deployContract("NFTMarketplace");
-    await NFTMarketplace.waitForDeployment();
+    const NFTMarketplace = await ethers.getContractFactory(
+      "contracts/NFTMarketplace.sol:NFTMarketplace"
+    );
+    const nftMarketplace = await NFTMarketplace.deploy();
+    await nftMarketplace.waitForDeployment();
 
     return {
-      nftContract: NFTContract,
-      nftMarketplace: NFTMarketplace,
+      nftContract: nftContract,
+      nftMarketplace: nftMarketplace,
       owner,
       user1,
       user2,

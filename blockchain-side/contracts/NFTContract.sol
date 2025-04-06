@@ -4,7 +4,8 @@ pragma solidity ^0.8.28;
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ERC2981} from "@openzeppelin/contracts/token/common/ERC2981.sol";
+import {ERC721Royalty} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
+import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 
 /**
  * @title NFTContract
@@ -12,7 +13,7 @@ import {ERC2981} from "@openzeppelin/contracts/token/common/ERC2981.sol";
  * @author Vitalik Cholan 
  * @dev Implementation of the NFT contract with royalty support and traits
  */
-contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
+contract NFTContract is ERC721URIStorage, ERC721Royalty, ERC721Enumerable, Ownable {
     // Struct to define a trait
     struct Trait {
         string traitType;  // e.g., "Background", "Eyes", "Mouth"
@@ -50,25 +51,25 @@ contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
         string memory symbol_
     ) ERC721(name_, symbol_) Ownable(msg.sender) {}
     
-    /**
+      /**
      * @dev Mints a new token with traits
      * @param to Address to receive the token
-     * @param tokenURI URI of the token metadata
+     * @param metadataURI URI of the token metadata
      * @param traits Array of traits for the token
      * @return tokenId The ID of the newly minted token
      */
     function mintWithTraits(
         address to,
-        string memory tokenURI,
+        string memory metadataURI,
         Trait[] memory traits
     ) public returns (uint256) {
-        require(bytes(tokenURI).length > 0, "Empty URI");
+        require(bytes(metadataURI).length > 0, "Empty URI");
 
         _tokenIdCounter++;
         uint256 newTokenId = _tokenIdCounter;
         
         _safeMint(to, newTokenId);
-        _setTokenURI(newTokenId, tokenURI);
+        _setTokenURI(newTokenId, metadataURI);
         _creators[newTokenId] = msg.sender;
         
         // Add traits
@@ -76,7 +77,7 @@ contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
             _tokenTraits[newTokenId].push(traits[i]);
         }
         
-        emit TokenMinted(msg.sender, newTokenId, tokenURI);
+        emit TokenMinted(msg.sender, newTokenId, metadataURI);
         emit TraitsAdded(newTokenId, traits);
         
         return newTokenId;
@@ -157,16 +158,43 @@ contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
         require(ownerOf(tokenId) != address(0), "Token does not exist");
         return _creators[tokenId];
     }
+
+    /**
+     * @dev Required override for _update when using both ERC721Enumerable and ERC721Royalty
+     */
+    function _update(address to, uint256 tokenId, address auth) 
+        internal 
+        virtual 
+        override(ERC721, ERC721Enumerable) 
+        returns (address)
+    {
+        return super._update(to, tokenId, auth);
+    }
+
+    /**
+     * @dev Required override for _increaseBalance when using both ERC721Enumerable and ERC721Royalty
+     */
+    function _increaseBalance(address account, uint128 amount) internal virtual override(ERC721, ERC721Enumerable) {
+        super._increaseBalance(account, amount);
+    }
     
     /**
      * @dev Override required by Solidity
      */
     function supportsInterface(
         bytes4 interfaceId
-    ) public view override(ERC721URIStorage, ERC2981) returns (bool) {
+    ) public view override(ERC721URIStorage, ERC721Royalty, ERC721Enumerable) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
-    
+
+    /**
+ * @dev Override the tokenURI function to resolve the conflict between
+ * ERC721URIStorage and ERC721Royalty
+ */
+    function tokenURI(uint256 tokenId) public view override(ERC721URIStorage, ERC721) returns (string memory) {
+        return super.tokenURI(tokenId);
+    }
+
     /**
      * @dev Burns a token
      * @param tokenId The ID of the token to burn
@@ -197,21 +225,21 @@ contract NFTContract is ERC721URIStorage, ERC2981, Ownable {
     /**
      * @dev Batch mint multiple tokens with traits
      * @param to Address to receive the tokens
-     * @param tokenURIs Array of token URIs
+     * @param metadataURIs Array of token metadata URIs
      * @param traitsArray Array of trait arrays for each token
      * @return Array of minted token IDs
      */
     function mintWithTraitsBatch(
         address to,
-        string[] memory tokenURIs,
+        string[] memory metadataURIs,
         Trait[][] memory traitsArray
     ) public returns (uint256[] memory) {
-        require(tokenURIs.length == traitsArray.length, "Array lengths mismatch");
+        require(metadataURIs.length == traitsArray.length, "Array lengths mismatch");
         
-        uint256[] memory newTokenIds = new uint256[](tokenURIs.length);
+        uint256[] memory newTokenIds = new uint256[](metadataURIs.length);
         
-        for (uint i = 0; i < tokenURIs.length; i++) {
-            newTokenIds[i] = mintWithTraits(to, tokenURIs[i], traitsArray[i]);
+        for (uint i = 0; i < metadataURIs.length; i++) {
+            newTokenIds[i] = mintWithTraits(to, metadataURIs[i], traitsArray[i]);
         }
         
         return newTokenIds;

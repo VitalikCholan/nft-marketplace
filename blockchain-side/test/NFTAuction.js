@@ -25,12 +25,16 @@ describe("NFTAuction", function () {
       await ethers.getSigners();
 
     // Deploy NFT contract
-    const NFTContract = await ethers.getContractFactory("NFTContract");
+    const NFTContract = await ethers.getContractFactory(
+      "contracts/NFTContract.sol:NFTContract"
+    );
     const nftContractInstance = await NFTContract.deploy("MyNFT", "MNFT");
     await nftContractInstance.waitForDeployment();
 
     // Deploy auction contract
-    const NFTAuction = await ethers.getContractFactory("NFTAuction");
+    const NFTAuction = await ethers.getContractFactory(
+      "contracts/NFTAuction.sol:NFTAuction"
+    );
     const nftAuctionInstance = await NFTAuction.deploy();
     await nftAuctionInstance.waitForDeployment();
 
