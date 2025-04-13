@@ -5,8 +5,9 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ERC721Royalty} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
+import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
 
-contract NFTMarketplace is Ownable, ReentrancyGuard {
+contract NFTMarketplace is Ownable, ReentrancyGuard, Pausable {
     struct MarketItem {
         uint256 tokenId;
         address nftContract;
@@ -78,7 +79,7 @@ contract NFTMarketplace is Ownable, ReentrancyGuard {
         address nftContract,
         uint256 tokenId,
         uint256 price
-    ) public payable nonReentrant {
+    ) public payable nonReentrant whenNotPaused {
         require(price > 0, "Price must be greater than 0");
         require(msg.value == listingPrice, "Must pay listing fee");
 
@@ -117,7 +118,7 @@ contract NFTMarketplace is Ownable, ReentrancyGuard {
         address nftContract,
         uint256 tokenId,
         uint256 duration
-    ) public payable nonReentrant {
+    ) public payable nonReentrant whenNotPaused {
         require(msg.value > 0, "Offer price must be greater than 0");
         require(duration >= 1 hours, "Invalid duration");
         
@@ -141,7 +142,7 @@ contract NFTMarketplace is Ownable, ReentrancyGuard {
         address nftContract,
         uint256 tokenId,
         uint256 offerIndex
-    ) public nonReentrant {
+    ) public nonReentrant whenNotPaused {
         MarketItem storage item = idToMarketItem[nftContract][tokenId];
         require(msg.sender == item.seller, "Only seller can accept offer");
 
@@ -186,7 +187,7 @@ contract NFTMarketplace is Ownable, ReentrancyGuard {
         address nftContract,
         uint256 tokenId,
         uint256 offerIndex
-    ) public nonReentrant {
+    ) public nonReentrant whenNotPaused {
         Offer[] storage offers = tokenIdToOffers[nftContract][tokenId];
         require(offerIndex < offers.length, "Invalid offer index");
         require(msg.sender == offers[offerIndex].buyer, "Only offer maker can cancel");
@@ -206,7 +207,7 @@ contract NFTMarketplace is Ownable, ReentrancyGuard {
     function purchaseNFT(
         address nftContract,
         uint256 tokenId
-    ) public payable nonReentrant {
+    ) public payable nonReentrant whenNotPaused {
         MarketItem storage item = idToMarketItem[nftContract][tokenId];
         require(!item.sold, "Item already sold");
         require(msg.value == item.price, "Incorrect price");
@@ -392,5 +393,21 @@ contract NFTMarketplace is Ownable, ReentrancyGuard {
         }
 
         return items;
+    }
+
+    /**
+     * @dev Pauses all marketplace operations.
+     * Can only be called by the owner.
+     */
+    function pause() public onlyOwner {
+        _pause();
+    }
+
+    /**
+     * @dev Unpauses all marketplace operations.
+     * Can only be called by the owner.
+     */
+    function unpause() public onlyOwner {
+        _unpause();
     }
 }

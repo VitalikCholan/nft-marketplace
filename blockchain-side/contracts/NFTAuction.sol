@@ -5,8 +5,9 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ERC721Royalty} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
+import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
 
-contract NFTAuction is Ownable, ReentrancyGuard {
+contract NFTAuction is Ownable, ReentrancyGuard, Pausable {
     struct Auction {
         uint256 tokenId;
         address nftContract;
@@ -41,7 +42,7 @@ contract NFTAuction is Ownable, ReentrancyGuard {
         uint256 tokenId,
         uint256 startingPrice,
         uint256 duration
-    ) public payable nonReentrant {
+    ) public payable nonReentrant whenNotPaused {
         require(startingPrice > 0, "Starting price must be greater than 0");
         require(duration >= 1 hours && duration <= 7 days, "Duration must be between 1 hour and 7 days");
         require(msg.value == auctionFee, "Must pay auction fee");
@@ -76,7 +77,7 @@ contract NFTAuction is Ownable, ReentrancyGuard {
      * @param nftContract Address of the NFT contract
      * @param tokenId Token ID of the auction
      */
-    function placeBid(address nftContract, uint256 tokenId) public payable nonReentrant {
+    function placeBid(address nftContract, uint256 tokenId) public payable nonReentrant whenNotPaused {
         Auction storage auction = tokenIdToAuction[nftContract][tokenId];
         
         require(!auction.ended, "Auction already ended");
@@ -102,7 +103,7 @@ contract NFTAuction is Ownable, ReentrancyGuard {
      * @param nftContract Address of the NFT contract
      * @param tokenId Token ID of the auction
      */
-    function endAuction(address nftContract, uint256 tokenId) public nonReentrant {
+    function endAuction(address nftContract, uint256 tokenId) public nonReentrant whenNotPaused {
         Auction storage auction = tokenIdToAuction[nftContract][tokenId];
         
         require(!auction.ended, "Auction already ended");
@@ -140,7 +141,7 @@ contract NFTAuction is Ownable, ReentrancyGuard {
      * @param nftContract Address of the NFT contract
      * @param tokenId Token ID of the auction
      */
-    function withdrawBid(address nftContract, uint256 tokenId) public nonReentrant {
+    function withdrawBid(address nftContract, uint256 tokenId) public nonReentrant whenNotPaused {
         uint256 amount = pendingReturns[nftContract][tokenId][msg.sender];
         require(amount > 0, "No funds to withdraw");
 
@@ -153,7 +154,7 @@ contract NFTAuction is Ownable, ReentrancyGuard {
      * @param nftContract Address of the NFT contract
      * @param tokenId Token ID of the auction
      */
-    function cancelAuction(address nftContract, uint256 tokenId) public nonReentrant {
+    function cancelAuction(address nftContract, uint256 tokenId) public nonReentrant whenNotPaused {
         Auction storage auction = tokenIdToAuction[nftContract][tokenId];
         
         require(!auction.ended, "Auction already ended");
@@ -166,4 +167,19 @@ contract NFTAuction is Ownable, ReentrancyGuard {
         emit AuctionCancelled(nftContract, tokenId);
     }
 
+    /**
+     * @dev Pauses all auction operations.
+     * Can only be called by the owner.
+     */
+    function pause() public onlyOwner {
+        _pause();
+    }
+
+    /**
+     * @dev Unpauses all auction operations.
+     * Can only be called by the owner.
+     */
+    function unpause() public onlyOwner {
+        _unpause();
+    }
 }

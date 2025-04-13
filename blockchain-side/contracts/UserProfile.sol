@@ -5,12 +5,13 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
  * @title UserProfile
  * @dev Contract for storing user profile data, preferences, and NFT connections
  */
-contract UserProfile is Ownable {
+contract UserProfile is Ownable, Pausable {
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.AddressSet;
 
@@ -76,7 +77,7 @@ contract UserProfile is Ownable {
         string memory bio,
         string memory avatarURI,
         string memory coverURI
-    ) external usernameAvailable(username) {
+    ) external usernameAvailable(username) whenNotPaused {
         require(!hasProfile[msg.sender], "Profile already exists");
         require(bytes(username).length >= 3, "Username too short");
         
@@ -107,7 +108,7 @@ contract UserProfile is Ownable {
         string memory bio,
         string memory avatarURI,
         string memory coverURI
-    ) external profileExists(msg.sender) onlyProfileOwner(msg.sender) {
+    ) external profileExists(msg.sender) onlyProfileOwner(msg.sender) whenNotPaused {
         Profile storage profile = profiles[msg.sender];
         
         if (keccak256(bytes(profile.bio)) != keccak256(bytes(bio))) {
@@ -137,7 +138,8 @@ contract UserProfile is Ownable {
         external 
         profileExists(msg.sender) 
         onlyProfileOwner(msg.sender)
-        usernameAvailable(newUsername) 
+        usernameAvailable(newUsername)
+        whenNotPaused
     {
         Profile storage profile = profiles[msg.sender];
         string memory oldUsername = profile.username;
@@ -161,7 +163,8 @@ contract UserProfile is Ownable {
     function addFavoriteNFT(address nftContract, uint256 tokenId) 
         external 
         profileExists(msg.sender) 
-        onlyProfileOwner(msg.sender) 
+        onlyProfileOwner(msg.sender)
+        whenNotPaused
     {
         require(IERC721(nftContract).ownerOf(tokenId) == msg.sender, "Not NFT owner");
         
@@ -186,7 +189,8 @@ contract UserProfile is Ownable {
     function removeFavoriteNFT(address nftContract, uint256 tokenId) 
         external 
         profileExists(msg.sender) 
-        onlyProfileOwner(msg.sender) 
+        onlyProfileOwner(msg.sender)
+        whenNotPaused
     {
         Profile storage profile = profiles[msg.sender];
         
@@ -386,5 +390,13 @@ contract UserProfile is Ownable {
             // If the contract doesn't support Enumerable, return an empty array
             return new uint256[](0);
         }
+    }
+
+    function pause() public onlyOwner {
+        _pause();
+    }
+
+    function unpause() public onlyOwner {
+        _unpause();
     }
 } 

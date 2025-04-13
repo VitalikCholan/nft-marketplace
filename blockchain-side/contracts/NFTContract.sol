@@ -6,6 +6,7 @@ import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC721Royalty} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Royalty.sol";
 import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
  * @title NFTContract
@@ -13,7 +14,7 @@ import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/
  * @author Vitalik Cholan 
  * @dev Implementation of the NFT contract with royalty support and traits
  */
-contract NFTContract is ERC721URIStorage, ERC721Royalty, ERC721Enumerable, Ownable {
+contract NFTContract is ERC721URIStorage, ERC721Royalty, ERC721Enumerable, Ownable, Pausable {
     // Struct to define a trait
     struct Trait {
         string traitType;  // e.g., "Background", "Eyes", "Mouth"
@@ -62,7 +63,7 @@ contract NFTContract is ERC721URIStorage, ERC721Royalty, ERC721Enumerable, Ownab
         address to,
         string memory metadataURI,
         Trait[] memory traits
-    ) public returns (uint256) {
+    ) public whenNotPaused returns (uint256) {
         require(bytes(metadataURI).length > 0, "Empty URI");
 
         _tokenIdCounter++;
@@ -120,7 +121,7 @@ contract NFTContract is ERC721URIStorage, ERC721Royalty, ERC721Enumerable, Ownab
      * @param tokenId The ID of the token
      * @param traits Array of traits to add/update
      */
-    function setTraits(uint256 tokenId, Trait[] memory traits) public {
+    function setTraits(uint256 tokenId, Trait[] memory traits) public whenNotPaused {
         require(ownerOf(tokenId) != address(0), "Token does not exist");
         require(_msgSender() == ownerOf(tokenId), "Caller is not the token owner");
         require(traits.length <= MAX_TRAITS, "Too many traits"); // Add trait limit
@@ -199,7 +200,7 @@ contract NFTContract is ERC721URIStorage, ERC721Royalty, ERC721Enumerable, Ownab
      * @dev Burns a token
      * @param tokenId The ID of the token to burn
      */
-    function burn(uint256 tokenId) public {
+    function burn(uint256 tokenId) public whenNotPaused {
         require((ownerOf(tokenId) == _msgSender()) || (isApprovedForAll(ownerOf(tokenId), _msgSender())), "Caller is not owner nor approved");
         _burn(tokenId);
         delete _creators[tokenId];
@@ -214,7 +215,7 @@ contract NFTContract is ERC721URIStorage, ERC721Royalty, ERC721Enumerable, Ownab
     function setTraitsBatch(
         uint256[] memory tokenIds,
         Trait[][] memory traitsArray
-    ) public {
+    ) public whenNotPaused {
         require(tokenIds.length == traitsArray.length, "Array lengths mismatch");
         
         for (uint i = 0; i < tokenIds.length; i++) {
@@ -233,7 +234,7 @@ contract NFTContract is ERC721URIStorage, ERC721Royalty, ERC721Enumerable, Ownab
         address to,
         string[] memory metadataURIs,
         Trait[][] memory traitsArray
-    ) public returns (uint256[] memory) {
+    ) public whenNotPaused returns (uint256[] memory) {
         require(metadataURIs.length == traitsArray.length, "Array lengths mismatch");
         
         uint256[] memory newTokenIds = new uint256[](metadataURIs.length);
@@ -243,5 +244,21 @@ contract NFTContract is ERC721URIStorage, ERC721Royalty, ERC721Enumerable, Ownab
         }
         
         return newTokenIds;
+    }
+
+    /**
+     * @dev Pauses all token transfers, minting and burning.
+     * Can only be called by the owner.
+     */
+    function pause() public onlyOwner {
+        _pause();
+    }
+
+    /**
+     * @dev Unpauses all token transfers, minting and burning.
+     * Can only be called by the owner.
+     */
+    function unpause() public onlyOwner {
+        _unpause();
     }
 }
