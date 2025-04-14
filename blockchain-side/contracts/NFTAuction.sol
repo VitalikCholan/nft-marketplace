@@ -17,17 +17,29 @@ contract NFTAuction is Ownable, ReentrancyGuard, Pausable {
         address currentBidder;
         uint256 endTime;
         bool ended;
+        uint256 commitPhaseEnd;
+        uint256 revealPhaseEnd;
+    }
+
+    struct Commit {
+        bytes32 commitment;
+        uint256 amount;
+        bool revealed;
     }
 
     mapping(address => mapping(uint256 => Auction)) public tokenIdToAuction;
+    mapping(address => mapping(uint256 => mapping(address => Commit))) private bidCommitments;
     mapping(address => mapping(uint256 => mapping(address => uint256))) private pendingReturns;
     
     uint256 public auctionFee = 0.01 ether;
+    uint256 public constant COMMIT_PHASE_DURATION = 1 days;
+    uint256 public constant REVEAL_PHASE_DURATION = 1 days;
 
     constructor() Ownable(msg.sender) {}
 
     event AuctionCreated(address nftContract, uint256 tokenId, uint256 startingPrice, uint256 endTime);
-    event BidPlaced(address nftContract, uint256 tokenId, address bidder, uint256 amount);
+    event BidCommitted(address nftContract, uint256 tokenId, address bidder, bytes32 commitment);
+    event BidRevealed(address nftContract, uint256 tokenId, address bidder, uint256 amount);
     event AuctionEnded(address nftContract, uint256 tokenId, address winner, uint256 amount);
     event AuctionCancelled(address nftContract, uint256 tokenId);
     /**
@@ -57,6 +69,10 @@ contract NFTAuction is Ownable, ReentrancyGuard, Pausable {
         // Transfer NFT to marketplace
         nft.transferFrom(msg.sender, address(this), tokenId);
 
+        uint256 commitPhaseEnd = block.timestamp + COMMIT_PHASE_DURATION;
+        uint256 revealPhaseEnd = commitPhaseEnd + REVEAL_PHASE_DURATION;
+        uint256 auctionEnd = revealPhaseEnd + duration;
+
         // Create auction
         tokenIdToAuction[nftContract][tokenId] = Auction({
             tokenId: tokenId,
@@ -65,37 +81,84 @@ contract NFTAuction is Ownable, ReentrancyGuard, Pausable {
             startingPrice: startingPrice,
             currentBid: 0,
             currentBidder: address(0),
-            endTime: block.timestamp + duration,
-            ended: false
+            endTime: auctionEnd,
+            ended: false,
+            commitPhaseEnd: commitPhaseEnd,
+            revealPhaseEnd: revealPhaseEnd
         });
 
-        emit AuctionCreated(nftContract, tokenId, startingPrice, block.timestamp + duration);
+        emit AuctionCreated(nftContract, tokenId, startingPrice, auctionEnd);
     }
 
     /**
-     * @dev Places a bid on an active auction
+     * @dev Commits a bid for an auction
      * @param nftContract Address of the NFT contract
      * @param tokenId Token ID of the auction
+     * @param commitment Hash of (bid amount + secret)
      */
-    function placeBid(address nftContract, uint256 tokenId) public payable nonReentrant whenNotPaused {
+    function commitBid(
+        address nftContract,
+        uint256 tokenId,
+        bytes32 commitment
+    ) public payable nonReentrant whenNotPaused {
         Auction storage auction = tokenIdToAuction[nftContract][tokenId];
         
         require(!auction.ended, "Auction already ended");
-        require(block.timestamp < auction.endTime, "Auction already ended");
-        require(msg.value > auction.currentBid, "Bid not high enough");
-        require(msg.value >= auction.startingPrice, "Bid below starting price");
-        require(msg.sender != auction.seller, "Seller cannot bid");
+        require(block.timestamp < auction.commitPhaseEnd, "Commit phase ended");
+        require(msg.value > 0, "Must send ETH with bid");
+        
+        // Store the commitment and the sent ETH
+        bidCommitments[nftContract][tokenId][msg.sender] = Commit({
+            commitment: commitment,
+            amount: msg.value,
+            revealed: false
+        });
 
-        // If this is not the first bid, refund the previous bidder
-        if (auction.currentBidder != address(0)) {
-            pendingReturns[nftContract][tokenId][auction.currentBidder] += auction.currentBid;
+        emit BidCommitted(nftContract, tokenId, msg.sender, commitment);
+    }
+
+    /**
+     * @dev Reveals a committed bid
+     * @param nftContract Address of the NFT contract
+     * @param tokenId Token ID of the auction
+     * @param amount The actual bid amount
+     * @param secret The secret used to create the commitment
+     */
+    function revealBid(
+        address nftContract,
+        uint256 tokenId,
+        uint256 amount,
+        bytes32 secret
+    ) public nonReentrant whenNotPaused {
+        Auction storage auction = tokenIdToAuction[nftContract][tokenId];
+        Commit storage commit = bidCommitments[nftContract][tokenId][msg.sender];
+        
+        require(!auction.ended, "Auction already ended");
+        require(block.timestamp >= auction.commitPhaseEnd, "Commit phase not ended");
+        require(block.timestamp < auction.revealPhaseEnd, "Reveal phase ended");
+        require(!commit.revealed, "Bid already revealed");
+        require(commit.commitment == keccak256(abi.encodePacked(amount, secret)), "Invalid reveal");
+        require(amount <= commit.amount, "Bid amount exceeds committed amount");
+
+        // If this is the highest bid so far
+        if (amount > auction.currentBid && amount >= auction.startingPrice) {
+            // Refund the previous highest bidder if any
+            if (auction.currentBidder != address(0)) {
+                pendingReturns[nftContract][tokenId][auction.currentBidder] += auction.currentBid;
+            }
+            
+            // Update auction state
+            auction.currentBid = amount;
+            auction.currentBidder = msg.sender;
+        } else {
+            // Refund the bidder
+            pendingReturns[nftContract][tokenId][msg.sender] += amount;
         }
 
-        // Update auction state
-        auction.currentBid = msg.value;
-        auction.currentBidder = msg.sender;
+        // Mark the bid as revealed
+        commit.revealed = true;
 
-        emit BidPlaced(nftContract, tokenId, msg.sender, msg.value);
+        emit BidRevealed(nftContract, tokenId, msg.sender, amount);
     }
 
     /**
@@ -159,7 +222,7 @@ contract NFTAuction is Ownable, ReentrancyGuard, Pausable {
         
         require(!auction.ended, "Auction already ended");
         require(msg.sender == auction.seller, "Only seller can cancel");
-        require(auction.currentBidder == address(0), "Cannot cancel auction with bids");
+        require(block.timestamp < auction.commitPhaseEnd, "Cannot cancel after commit phase");
 
         auction.ended = true;
         IERC721(nftContract).transferFrom(address(this), auction.seller, tokenId);
